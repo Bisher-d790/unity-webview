@@ -1,15 +1,15 @@
 /*
  * Copyright (C) 2011 Keijiro Takahashi
  * Copyright (C) 2012 GREE, Inc.
- * 
+ *
  * This software is provided 'as-is', without any express or implied
  * warranty.  In no event will the authors be held liable for any damages
  * arising from the use of this software.
- * 
+ *
  * Permission is granted to anyone to use this software for any purpose,
  * including commercial applications, and to alter it and redistribute it
  * freely, subject to the following restrictions:
- * 
+ *
  * 1. The origin of this software must not be misrepresented; you must not
  *    claim that you wrote the original software. If you use this software
  *    in a product, an acknowledgment in the product documentation would be
@@ -77,11 +77,13 @@ class CWebViewPluginInterface {
 
     public void call(final String method, final String message) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mPlugin.IsInitialized()) {
-                UnityPlayer.UnitySendMessage(mGameObject, method, message);
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mPlugin.IsInitialized()) {
+                    UnityPlayer.UnitySendMessage(mGameObject, method, message);
+                }
             }
-        }});
+        });
     }
 }
 
@@ -131,247 +133,273 @@ public class CWebViewPlugin {
     public void Init(final String gameObject, final boolean transparent, final String ua) {
         final CWebViewPlugin self = this;
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView != null) {
-                return;
-            }
-            mAlertDialogEnabled = true;
-            mCustomHeaders = new Hashtable<String, String>();
-            
-            final WebView webView = new WebView(a);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                try {
-                    ApplicationInfo ai = a.getPackageManager().getApplicationInfo(a.getPackageName(), 0);
-                    if ((ai.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-                        webView.setWebContentsDebuggingEnabled(true);
-                    }
-                } catch (Exception ex) {
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView != null) {
+                    return;
                 }
-            }
-            webView.setVisibility(View.GONE);
-            webView.setFocusable(true);
-            webView.setFocusableInTouchMode(true);
+                mAlertDialogEnabled = true;
+                mCustomHeaders = new Hashtable<String, String>();
 
-            // webView.setWebChromeClient(new WebChromeClient() {
-            //     public boolean onConsoleMessage(android.webkit.ConsoleMessage cm) {
-            //         Log.d("Webview", cm.message());
-            //         return true;
-            //     }
-            // });
-            webView.setWebChromeClient(new WebChromeClient() {
-                View videoView;
-
-                // cf. https://stackoverflow.com/questions/40659198/how-to-access-the-camera-from-within-a-webview/47525818#47525818
-                // cf. https://github.com/googlesamples/android-PermissionRequest/blob/eff1d21f0b9c91d67c7f2a2303b591447e61e942/Application/src/main/java/com/example/android/permissionrequest/PermissionRequestFragment.java#L148-L161
-                @Override
-                public void onPermissionRequest(final PermissionRequest request) {
-                    final String[] requestedResources = request.getResources();
-                    for (String r : requestedResources) {
-                        if (r.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) || r.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                            request.grant(requestedResources);
-                            // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            //     a.runOnUiThread(new Runnable() {public void run() {
-                            //         final String[] permissions = {
-                            //             "android.permission.CAMERA",
-                            //             "android.permission.RECORD_AUDIO",
-                            //         };
-                            //         ActivityCompat.requestPermissions(a, permissions, 0);
-                            //     }});
-                            // }
-                            break;
-                        }
-                    }
-                }
-
-                @Override
-                public void onProgressChanged(WebView view, int newProgress) {
-                    progress = newProgress;
-                }
-
-                @Override
-                public void onShowCustomView(View view, CustomViewCallback callback) {
-                    super.onShowCustomView(view, callback);
-                    if (layout != null) {
-                        videoView = view;
-                        layout.setBackgroundColor(0xff000000);
-                        layout.addView(videoView);
-                    }
-                }
-
-                @Override
-                public void onHideCustomView() {
-                    super.onHideCustomView();
-                    if (layout != null) {
-                        layout.removeView(videoView);
-                        layout.setBackgroundColor(0x00000000);
-                        videoView = null;
-                    }
-                }
-
-                @Override
-                public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
-                    if (!mAlertDialogEnabled) {
-                        result.cancel();
-                        return true;
-                    }
-                    return super.onJsAlert(view, url, message, result);
-                }
-
-                @Override
-                public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
-                    if (!mAlertDialogEnabled) {
-                        result.cancel();
-                        return true;
-                    }
-                    return super.onJsConfirm(view, url, message, result);
-                }
-
-                @Override
-                public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
-                    if (!mAlertDialogEnabled) {
-                        result.cancel();
-                        return true;
-                    }
-                   return super.onJsPrompt(view, url, message, defaultValue, result);
-                }
-
-            });
-
-            mWebViewPlugin = new CWebViewPluginInterface(self, gameObject);
-            webView.setWebViewClient(new WebViewClient() {
-                @Override
-                public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-                    webView.loadUrl("about:blank");
-                    canGoBack = webView.canGoBack();
-                    canGoForward = webView.canGoForward();
-                    mWebViewPlugin.call("CallOnError", errorCode + "\t" + description + "\t" + failingUrl);
-                }
-                
-                @Override
-                public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
-                	canGoBack = webView.canGoBack();
-                    canGoForward = webView.canGoForward();
-                    mWebViewPlugin.call("CallOnHttpError", Integer.toString(errorResponse.getStatusCode()));
-                }
-
-                @Override
-                public void onPageStarted(WebView view, String url, Bitmap favicon) {
-                    canGoBack = webView.canGoBack();
-                    canGoForward = webView.canGoForward();
-                    mWebViewPlugin.call("CallOnStarted", url);
-                }
-
-                @Override
-                public void onPageFinished(WebView view, String url) {
-                    canGoBack = webView.canGoBack();
-                    canGoForward = webView.canGoForward();
-                    mWebViewPlugin.call("CallOnLoaded", url);
-                }
-
-                @Override
-                public void onLoadResource(WebView view, String url) {
-                    canGoBack = webView.canGoBack();
-                    canGoForward = webView.canGoForward();
-                }
-
-                @Override
-                public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-                    if (mCustomHeaders == null || mCustomHeaders.isEmpty()) {
-                        return super.shouldInterceptRequest(view, url);
-                    }
-
+                final WebView webView = new WebView(a);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                     try {
-                        HttpURLConnection urlCon = (HttpURLConnection) (new URL(url)).openConnection();
-                        // The following should make HttpURLConnection have a same user-agent of webView)
-                        // cf. http://d.hatena.ne.jp/faw/20070903/1188796959 (in Japanese)
-                        urlCon.setRequestProperty("User-Agent", mWebViewUA);
+                        ApplicationInfo ai = a.getPackageManager().getApplicationInfo(a.getPackageName(), 0);
+                        if ((ai.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                            webView.setWebContentsDebuggingEnabled(true);
+                        }
+                    } catch (Exception ex) {
+                    }
+                }
+                webView.setVisibility(View.GONE);
+                webView.setFocusable(true);
+                webView.setFocusableInTouchMode(true);
 
-                        for (HashMap.Entry<String, String> entry: mCustomHeaders.entrySet()) {
-                            urlCon.setRequestProperty(entry.getKey(), entry.getValue());
+                // webView.setWebChromeClient(new WebChromeClient() {
+                //     public boolean onConsoleMessage(android.webkit.ConsoleMessage cm) {
+                //         Log.d("Webview", cm.message());
+                //         return true;
+                //     }
+                // });
+                webView.setWebChromeClient(new WebChromeClient() {
+                    View videoView;
+
+                    // cf. https://stackoverflow.com/questions/40659198/how-to-access-the-camera-from-within-a-webview/47525818#47525818
+                    // cf. https://github.com/googlesamples/android-PermissionRequest/blob/eff1d21f0b9c91d67c7f2a2303b591447e61e942/Application/src/main/java/com/example/android/permissionrequest/PermissionRequestFragment.java#L148-L161
+                    @Override
+                    public void onPermissionRequest(final PermissionRequest request) {
+                        final String[] requestedResources = request.getResources();
+                        for (String r : requestedResources) {
+                            if (r.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) || r.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                                request.grant(requestedResources);
+                                // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                                //     a.runOnUiThread(new Runnable() {public void run() {
+                                //         final String[] permissions = {
+                                //             "android.permission.CAMERA",
+                                //             "android.permission.RECORD_AUDIO",
+                                //         };
+                                //         ActivityCompat.requestPermissions(a, permissions, 0);
+                                //     }});
+                                // }
+                                break;
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onProgressChanged(WebView view, int newProgress) {
+                        progress = newProgress;
+                    }
+
+                    @Override
+                    public void onShowCustomView(View view, CustomViewCallback callback) {
+                        super.onShowCustomView(view, callback);
+                        if (layout != null) {
+                            videoView = view;
+                            layout.setBackgroundColor(0xff000000);
+                            layout.addView(videoView);
+                        }
+                    }
+
+                    @Override
+                    public void onHideCustomView() {
+                        super.onHideCustomView();
+                        if (layout != null) {
+                            layout.removeView(videoView);
+                            layout.setBackgroundColor(0x00000000);
+                            videoView = null;
+                        }
+                    }
+
+                    @Override
+                    public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                        if (!mAlertDialogEnabled) {
+                            result.cancel();
+                            return true;
+                        }
+                        return super.onJsAlert(view, url, message, result);
+                    }
+
+                    @Override
+                    public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+                        if (!mAlertDialogEnabled) {
+                            result.cancel();
+                            return true;
+                        }
+                        return super.onJsConfirm(view, url, message, result);
+                    }
+
+                    @Override
+                    public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+                        if (!mAlertDialogEnabled) {
+                            result.cancel();
+                            return true;
+                        }
+                        return super.onJsPrompt(view, url, message, defaultValue, result);
+                    }
+
+                });
+
+                mWebViewPlugin = new CWebViewPluginInterface(self, gameObject);
+                webView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                        webView.loadUrl("about:blank");
+                        canGoBack = webView.canGoBack();
+                        canGoForward = webView.canGoForward();
+                        mWebViewPlugin.call("CallOnError", errorCode + "\t" + description + "\t" + failingUrl);
+                    }
+
+                    @Override
+                    public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse errorResponse) {
+                        canGoBack = webView.canGoBack();
+                        canGoForward = webView.canGoForward();
+                        mWebViewPlugin.call("CallOnHttpError", Integer.toString(errorResponse.getStatusCode()));
+                    }
+
+                    @Override
+                    public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                        canGoBack = webView.canGoBack();
+                        canGoForward = webView.canGoForward();
+                        mWebViewPlugin.call("CallOnStarted", url);
+                    }
+
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        canGoBack = webView.canGoBack();
+                        canGoForward = webView.canGoForward();
+                        mWebViewPlugin.call("CallOnLoaded", url);
+                    }
+
+                    @Override
+                    public void onLoadResource(WebView view, String url) {
+                        canGoBack = webView.canGoBack();
+                        canGoForward = webView.canGoForward();
+                    }
+
+                    @Override
+                    public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                        if (mCustomHeaders == null || mCustomHeaders.isEmpty()) {
+                            return super.shouldInterceptRequest(view, url);
                         }
 
-                        urlCon.connect();
+                        try {
+                            HttpURLConnection urlCon = (HttpURLConnection) (new URL(url)).openConnection();
+                            // The following should make HttpURLConnection have a same user-agent of webView)
+                            // cf. http://d.hatena.ne.jp/faw/20070903/1188796959 (in Japanese)
+                            urlCon.setRequestProperty("User-Agent", mWebViewUA);
 
-                        return new WebResourceResponse(
-                            urlCon.getContentType().split(";", 2)[0],
-                            urlCon.getContentEncoding(),
-                            urlCon.getInputStream()
-                        );
+                            for (HashMap.Entry<String, String> entry : mCustomHeaders.entrySet()) {
+                                urlCon.setRequestProperty(entry.getKey(), entry.getValue());
+                            }
 
-                    } catch (Exception e) {
-                        return super.shouldInterceptRequest(view, url);
+                            urlCon.connect();
+
+                            return new WebResourceResponse(
+                                    urlCon.getContentType().split(";", 2)[0],
+                                    urlCon.getContentEncoding(),
+                                    urlCon.getInputStream()
+                            );
+
+                        } catch (Exception e) {
+                            return super.shouldInterceptRequest(view, url);
+                        }
                     }
-                }
 
-                @Override
-                public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                    canGoBack = webView.canGoBack();
-                    canGoForward = webView.canGoForward();
-                    if (url.startsWith("http://") || url.startsWith("https://")
-                        || url.startsWith("file://") || url.startsWith("javascript:")) {
-                        // Let webview handle the URL
-                        return false;
-                    } else if (url.startsWith("unity:")) {
-                        String message = url.substring(6);
-                        mWebViewPlugin.call("CallFromJS", message);
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                        canGoBack = webView.canGoBack();
+                        canGoForward = webView.canGoForward();
+
+                        if (url.startsWith("https://play.google.com/store/apps/details?id=")
+                                || url.startsWith("http://play.google.com/store/apps/details?id=")) {
+
+                            String URLSuffix = "https://play.google.com/store/apps/details?id=";
+                            String appID = url.substring(URLSuffix.length());
+                            System.out.println("equals market: " + appID);
+
+                            try {
+                                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                                view.getContext().startActivity(intent);
+                                return true;
+                            } catch (Exception e) { //google play app is not installed
+                                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.example"));
+                                view.getContext().startActivity(intent);
+                                return false;
+                            }
+                        } else if (url.startsWith("http://") || url.startsWith("https://")
+                                || url.startsWith("file://") || url.startsWith("javascript:")) {
+                            System.out.println("equals http: " + url);
+
+                            // Let webview handle the URL
+                            return false;
+                        } else if (url.startsWith("unity:")) {
+                            System.out.println("equals unity: " + url);
+
+                            String message = url.substring(6);
+                            mWebViewPlugin.call("CallFromJS", message);
+                            return true;
+                        }
+
+                        System.out.println("equals out of conditions: " + url);
+
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        PackageManager pm = a.getPackageManager();
+                        List<ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
+                        if (apps.size() > 0) {
+                            view.getContext().startActivity(intent);
+                        }
                         return true;
                     }
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                    PackageManager pm = a.getPackageManager();
-                    List<ResolveInfo> apps = pm.queryIntentActivities(intent, 0);
-                    if (apps.size() > 0) {
-                        view.getContext().startActivity(intent);
-                    }
-                    return true;
+                });
+                webView.addJavascriptInterface(mWebViewPlugin, "Unity");
+
+                WebSettings webSettings = webView.getSettings();
+                if (ua != null && ua.length() > 0) {
+                    webSettings.setUserAgentString(ua);
                 }
-            });
-            webView.addJavascriptInterface(mWebViewPlugin , "Unity");
+                mWebViewUA = webSettings.getUserAgentString();
+                webSettings.setSupportZoom(true);
+                webSettings.setBuiltInZoomControls(true);
+                webSettings.setDisplayZoomControls(false);
+                webSettings.setLoadWithOverviewMode(true);
+                webSettings.setUseWideViewPort(true);
+                webSettings.setJavaScriptEnabled(true);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                    // Log.i("CWebViewPlugin", "Build.VERSION.SDK_INT = " + Build.VERSION.SDK_INT);
+                    webSettings.setAllowUniversalAccessFromFileURLs(true);
+                }
+                if (android.os.Build.VERSION.SDK_INT >= 17) {
+                    webSettings.setMediaPlaybackRequiresUserGesture(false);
+                }
+                webSettings.setDatabaseEnabled(true);
+                webSettings.setDomStorageEnabled(true);
+                String databasePath = webView.getContext().getDir("databases", Context.MODE_PRIVATE).getPath();
+                webSettings.setDatabasePath(databasePath);
 
-            WebSettings webSettings = webView.getSettings();
-            if (ua != null && ua.length() > 0) {
-                webSettings.setUserAgentString(ua);
-            }
-            mWebViewUA = webSettings.getUserAgentString();
-            webSettings.setSupportZoom(true);
-            webSettings.setBuiltInZoomControls(true);
-            webSettings.setDisplayZoomControls(false);
-            webSettings.setLoadWithOverviewMode(true);
-            webSettings.setUseWideViewPort(true);
-            webSettings.setJavaScriptEnabled(true);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                // Log.i("CWebViewPlugin", "Build.VERSION.SDK_INT = " + Build.VERSION.SDK_INT);
-                webSettings.setAllowUniversalAccessFromFileURLs(true);
-            }
-            if (android.os.Build.VERSION.SDK_INT >= 17) {
-                webSettings.setMediaPlaybackRequiresUserGesture(false);
-            }
-            webSettings.setDatabaseEnabled(true);
-            webSettings.setDomStorageEnabled(true);
-            String databasePath = webView.getContext().getDir("databases", Context.MODE_PRIVATE).getPath();
-            webSettings.setDatabasePath(databasePath);
+                if (transparent) {
+                    webView.setBackgroundColor(0x00000000);
+                }
 
-            if (transparent) {
-                webView.setBackgroundColor(0x00000000);
+                if (layout == null || layout.getParent() != a.findViewById(android.R.id.content)) {
+                    layout = new FrameLayout(a);
+                    a.addContentView(
+                            layout,
+                            new LayoutParams(
+                                    LayoutParams.MATCH_PARENT,
+                                    LayoutParams.MATCH_PARENT));
+                    layout.setFocusable(true);
+                    layout.setFocusableInTouchMode(true);
+                }
+                layout.addView(
+                        webView,
+                        new FrameLayout.LayoutParams(
+                                LayoutParams.MATCH_PARENT,
+                                LayoutParams.MATCH_PARENT,
+                                Gravity.NO_GRAVITY));
+                mWebView = webView;
             }
-
-            if (layout == null || layout.getParent() != a.findViewById(android.R.id.content)) {
-                layout = new FrameLayout(a);
-                a.addContentView(
-                    layout,
-                    new LayoutParams(
-                        LayoutParams.MATCH_PARENT,
-                        LayoutParams.MATCH_PARENT));
-                layout.setFocusable(true);
-                layout.setFocusableInTouchMode(true);
-            }
-            layout.addView(
-                webView,
-                new FrameLayout.LayoutParams(
-                    LayoutParams.MATCH_PARENT,
-                    LayoutParams.MATCH_PARENT,
-                    Gravity.NO_GRAVITY));
-            mWebView = webView;
-        }});
+        });
 
         final View activityRootView = a.getWindow().getDecorView().getRootView();
         mGlobalLayoutListener = new OnGlobalLayoutListener() {
@@ -404,147 +432,165 @@ public class CWebViewPlugin {
 
     public void Destroy() {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                if (mGlobalLayoutListener != null) {
+                    View activityRootView = a.getWindow().getDecorView().getRootView();
+                    activityRootView.getViewTreeObserver().removeOnGlobalLayoutListener(mGlobalLayoutListener);
+                    mGlobalLayoutListener = null;
+                }
+                mWebView.stopLoading();
+                layout.removeView(mWebView);
+                mWebView.destroy();
+                mWebView = null;
             }
-            if (mGlobalLayoutListener != null) {
-                View activityRootView = a.getWindow().getDecorView().getRootView();
-                activityRootView.getViewTreeObserver().removeOnGlobalLayoutListener(mGlobalLayoutListener);
-                mGlobalLayoutListener = null;
-            }
-            mWebView.stopLoading();
-            layout.removeView(mWebView);
-            mWebView.destroy();
-            mWebView = null;
-        }});
+        });
     }
 
     public void LoadURL(final String url) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                if (mCustomHeaders != null && !mCustomHeaders.isEmpty()) {
+                    mWebView.loadUrl(url, mCustomHeaders);
+                } else {
+                    mWebView.loadUrl(url);
+                    ;
+                }
             }
-            if (mCustomHeaders != null && !mCustomHeaders.isEmpty()) {
-                mWebView.loadUrl(url, mCustomHeaders);
-            } else {
-                mWebView.loadUrl(url);;
-            }
-        }});
+        });
     }
 
-    public void LoadHTML(final String html, final String baseURL)
-    {
+    public void LoadHTML(final String html, final String baseURL) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                mWebView.loadDataWithBaseURL(baseURL, html, "text/html", "UTF8", null);
             }
-            mWebView.loadDataWithBaseURL(baseURL, html, "text/html", "UTF8", null);
-        }});
+        });
     }
 
     public void EvaluateJS(final String js) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                    mWebView.evaluateJavascript(js, null);
+                } else {
+                    mWebView.loadUrl("javascript:" + URLEncoder.encode(js));
+                }
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                mWebView.evaluateJavascript(js, null);
-            } else {
-                mWebView.loadUrl("javascript:" + URLEncoder.encode(js));
-            }
-        }});
+        });
     }
 
     public void GoBack() {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                mWebView.goBack();
             }
-            mWebView.goBack();
-        }});
+        });
     }
 
     public void GoForward() {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                mWebView.goForward();
             }
-            mWebView.goForward();
-        }});
+        });
     }
 
     public void SetMargins(int left, int top, int right, int bottom) {
         final FrameLayout.LayoutParams params
-            = new FrameLayout.LayoutParams(
+                = new FrameLayout.LayoutParams(
                 LayoutParams.MATCH_PARENT,
                 LayoutParams.MATCH_PARENT,
                 Gravity.NO_GRAVITY);
         params.setMargins(left, top, right, bottom);
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                mWebView.setLayoutParams(params);
             }
-            mWebView.setLayoutParams(params);
-        }});
+        });
     }
 
     public void SetVisibility(final boolean visibility) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                if (visibility) {
+                    mWebView.setVisibility(View.VISIBLE);
+                    layout.requestFocus();
+                    mWebView.requestFocus();
+                } else {
+                    mWebView.setVisibility(View.GONE);
+                }
             }
-            if (visibility) {
-                mWebView.setVisibility(View.VISIBLE);
-                layout.requestFocus();
-                mWebView.requestFocus();
-            } else {
-                mWebView.setVisibility(View.GONE);
-            }
-        }});
+        });
     }
 
     public void SetAlertDialogEnabled(final boolean enabled) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            mAlertDialogEnabled = enabled;
-        }});
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                mAlertDialogEnabled = enabled;
+            }
+        });
     }
 
     // cf. https://stackoverflow.com/questions/31788748/webview-youtube-videos-playing-in-background-on-rotation-and-minimise/31789193#31789193
     public void OnApplicationPause(final boolean paused) {
         final Activity a = UnityPlayer.currentActivity;
-        a.runOnUiThread(new Runnable() {public void run() {
-            if (mWebView == null) {
-                return;
+        a.runOnUiThread(new Runnable() {
+            public void run() {
+                if (mWebView == null) {
+                    return;
+                }
+                if (paused) {
+                    mWebView.onPause();
+                    mWebView.pauseTimers();
+                } else {
+                    mWebView.onResume();
+                    mWebView.resumeTimers();
+                }
             }
-            if (paused) {
-                mWebView.onPause();
-                mWebView.pauseTimers();
-            } else {
-                mWebView.onResume();
-                mWebView.resumeTimers();
-            }
-        }});
+        });
     }
 
-    public void AddCustomHeader(final String headerKey, final String headerValue)
-    {
+    public void AddCustomHeader(final String headerKey, final String headerValue) {
         if (mCustomHeaders == null) {
             return;
         }
         mCustomHeaders.put(headerKey, headerValue);
     }
 
-    public String GetCustomHeaderValue(final String headerKey)
-    {
+    public String GetCustomHeaderValue(final String headerKey) {
         if (mCustomHeaders == null) {
             return null;
         }
@@ -555,8 +601,7 @@ public class CWebViewPlugin {
         return this.mCustomHeaders.get(headerKey);
     }
 
-    public void RemoveCustomHeader(final String headerKey)
-    {
+    public void RemoveCustomHeader(final String headerKey) {
         if (mCustomHeaders == null) {
             return;
         }
@@ -566,8 +611,7 @@ public class CWebViewPlugin {
         }
     }
 
-    public void ClearCustomHeader()
-    {
+    public void ClearCustomHeader() {
         if (mCustomHeaders == null) {
             return;
         }
@@ -575,26 +619,23 @@ public class CWebViewPlugin {
         this.mCustomHeaders.clear();
     }
 
-    public void ClearCookies()
-    {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) 
-        {
-           CookieManager.getInstance().removeAllCookies(null);
-           CookieManager.getInstance().flush();
+    public void ClearCookies() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            CookieManager.getInstance().removeAllCookies(null);
+            CookieManager.getInstance().flush();
         } else {
-           final Activity a = UnityPlayer.currentActivity;
-           CookieSyncManager cookieSyncManager = CookieSyncManager.createInstance(a);
-           cookieSyncManager.startSync();
-           CookieManager cookieManager = CookieManager.getInstance();
-           cookieManager.removeAllCookie();
-           cookieManager.removeSessionCookie();
-           cookieSyncManager.stopSync();
-           cookieSyncManager.sync();
+            final Activity a = UnityPlayer.currentActivity;
+            CookieSyncManager cookieSyncManager = CookieSyncManager.createInstance(a);
+            cookieSyncManager.startSync();
+            CookieManager cookieManager = CookieManager.getInstance();
+            cookieManager.removeAllCookie();
+            cookieManager.removeSessionCookie();
+            cookieSyncManager.stopSync();
+            cookieSyncManager.sync();
         }
     }
 
-    public String GetCookies(String url)
-    {
+    public String GetCookies(String url) {
         CookieManager cookieManager = CookieManager.getInstance();
         return cookieManager.getCookie(url);
     }
